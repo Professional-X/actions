@@ -204,12 +204,17 @@ def initiate_resumable_upload(
     response: Any = None
     for attempt in range(1, max_attempts + 1):
         try:
+            # Per Composio v3.1 REST API: `body` is a nullable object (dict),
+            # NOT a JSON string. Passing json.dumps(...) here causes YouTube to
+            # see the body as a JSON-stringified string, which fails with
+            # "Invalid JSON payload received. Unknown name '': Root element
+            # must be a message."
             response = composio.tools.proxy(
                 endpoint=endpoint,
                 method="POST",
                 connected_account_id=connected_account_id,
                 user_id=user_id,
-                body=json.dumps(body),
+                body=body,
                 parameters=params,
             )
         except Exception as exc:
