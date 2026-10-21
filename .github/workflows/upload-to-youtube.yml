@@ -1,0 +1,85 @@
+name: Upload Video to YouTube
+
+# Triggered manually with title + description inputs.
+# The workflow downloads the configured video URL, then uploads it to the
+# YouTube channel that's connected to the Composio connected account.
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "YouTube video title"
+        required: true
+        type: string
+        default: "Uploaded via Composio + GitHub Actions"
+      description:
+        description: "YouTube video description (use \\n for new lines)"
+        required: false
+        type: string
+        default: "Auto-uploaded by GitHub Actions using the Composio YouTube toolkit."
+      privacy_status:
+        description: "Privacy status (public / unlisted / private)"
+        required: false
+        type: choice
+        default: "private"
+        options:
+          - private
+          - unlisted
+          - public
+      category_id:
+        description: "YouTube category ID (22 = People & Blogs, 24 = Entertainment, 28 = Science & Tech, 27 = Education)"
+        required: false
+        type: string
+        default: "22"
+      video_url:
+        description: "Direct video URL to download and upload (leave blank to use default)"
+        required: false
+        type: string
+        default: ""
+
+env:
+  # Hard-coded default video URL — override per-run with the `video_url` input if needed.
+  DEFAULT_VIDEO_URL: "https://pub-03a929aaf5e0429f83077e0a67a25764.r2.dev/2ef1554c7ff438d8ee01d233c88ec52c"
+
+jobs:
+  upload:
+    name: Download & Upload to YouTube
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Resolve effective video URL
+        id: url
+        run: |
+          if [ -n "${{ inputs.video_url }}" ]; then
+            echo "url=${{ inputs.video_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=${DEFAULT_VIDEO_URL}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run uploader
+        env:
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+          COMPOSIO_CONNECTED_ACCOUNT_ID: ${{ secrets.COMPOSIO_CONNECTED_ACCOUNT_ID }}
+          COMPOSIO_USER_ID: ${{ secrets.COMPOSIO_USER_ID }}
+          VIDEO_URL: ${{ steps.url.outputs.url }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_DESCRIPTION: ${{ inputs.description }}
+          INPUT_PRIVACY: ${{ inputs.privacy_status }}
+          INPUT_CATEGORY_ID: ${{ inputs.category_id }}
+          YOUTUBE_USER_ID: ${{ secrets.YOUTUBE_USER_ID }}
+        run: |
+          python upload_to_youtube.py
