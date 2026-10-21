@@ -196,28 +196,50 @@ def initiate_resumable_upload(
 
     log("composio", f"Initiating resumable upload via proxy (size={file_size:,} bytes)")
 
-    try:
-        response = composio.tools.proxy(
-            endpoint=endpoint,
-            method="POST",
-            connected_account_id=connected_account_id,
-            user_id=user_id,
-            body=json.dumps(body),
-            parameters=params,
-        )
-    except Exception as exc:
-        die(f"Composio proxy call failed: {exc!r}")
+    # YouTube may return 429 RESOURCE_EXHAUSTED on the project's daily video-upload
+    # quota. Retry a few times with exponential backoff in case the limit is
+    # enforced per-minute rather than truly per-day.
+    max_attempts = 6
+    base_delay = 30.0  # seconds
+    response: Any = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = composio.tools.proxy(
+                endpoint=endpoint,
+                method="POST",
+                connected_account_id=connected_account_id,
+                user_id=user_id,
+                body=json.dumps(body),
+                parameters=params,
+            )
+        except Exception as exc:
+            die(f"Composio proxy call failed: {exc!r}")
 
-    log("composio", f"Proxy response type: {type(response).__name__}")
+        status = None
+        if hasattr(response, "status"):
+            status = getattr(response, "status")
+        elif isinstance(response, dict):
+            status = response.get("status") or response.get("statusCode")
 
-    # Surface a useful error if the upstream returned non-2xx.
-    status = None
-    if hasattr(response, "status"):
-        status = getattr(response, "status")
-    elif isinstance(response, dict):
-        status = response.get("status") or response.get("statusCode")
-    if status is not None and not (200 <= int(status) < 300):
-        die(f"YouTube resumable-upload initiation failed with status {status}: {repr(response)[:1500]}")
+        # Detect quota exhaustion: HTTP 429, or 200 with a RESOURCE_EXHAUSTED body.
+        is_quota = False
+        if status is not None and int(status) == 429:
+            is_quota = True
+        elif isinstance(response, dict) and isinstance(response.get("data"), dict):
+            err = response["data"].get("error") or {}
+            if err.get("status") == "RESOURCE_EXHAUSTED" or err.get("code") == 429:
+                is_quota = True
+
+        if is_quota and attempt < max_attempts:
+            delay = base_delay * (2 ** (attempt - 1))
+            log("composio", f"YouTube returned 429 quota (attempt {attempt}/{max_attempts}); retrying in {delay:.0f}s...")
+            time.sleep(delay)
+            continue
+
+        if status is not None and not (200 <= int(status) < 300):
+            die(f"YouTube resumable-upload initiation failed with status {status}: {repr(response)[:1500]}")
+
+        break  # success (or out of retries on a hard failure)
 
     location = extract_location(response)
     log("composio", f"Got upload URL: {location[:100]}...")
