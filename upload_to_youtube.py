@@ -188,7 +188,11 @@ def initiate_resumable_upload(
         {"name": "Accept", "value": "application/json", "type": "header"},
     ]
 
-    endpoint = "/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status,contentDetails"
+    # Use an absolute URL — Composio's base URL for the YouTube toolkit is
+    # `https://www.googleapis.com/youtube/v3`, so a relative path like
+    # `/upload/youtube/v3/videos` would be appended to that and 404.
+    # The resumable-upload endpoint lives at a different path prefix.
+    endpoint = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
 
     log("composio", f"Initiating resumable upload via proxy (size={file_size:,} bytes)")
 
