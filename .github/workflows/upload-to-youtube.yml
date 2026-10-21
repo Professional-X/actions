@@ -72,9 +72,15 @@ jobs:
 
       - name: Run uploader
         env:
+          # Primary credential set
           COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
           COMPOSIO_CONNECTED_ACCOUNT_ID: ${{ secrets.COMPOSIO_CONNECTED_ACCOUNT_ID }}
           COMPOSIO_USER_ID: ${{ secrets.COMPOSIO_USER_ID }}
+          # Secondary (fallback) credential set — used if primary fails with
+          # 429 quota or any other hard error.
+          COMPOSIO_API_KEY_2: ${{ secrets.COMPOSIO_API_KEY_2 }}
+          COMPOSIO_CONNECTED_ACCOUNT_ID_2: ${{ secrets.COMPOSIO_CONNECTED_ACCOUNT_ID_2 }}
+          COMPOSIO_USER_ID_2: ${{ secrets.COMPOSIO_USER_ID_2 }}
           VIDEO_URL: ${{ steps.url.outputs.url }}
           INPUT_TITLE: ${{ inputs.title }}
           INPUT_DESCRIPTION: ${{ inputs.description }}
